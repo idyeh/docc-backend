@@ -2,4 +2,6 @@ Flask
 Flask-SQLAlchemy
 Flask-Migrate
 Flask-JWT-Extended
+flask-cors
 python-dotenv
+minio

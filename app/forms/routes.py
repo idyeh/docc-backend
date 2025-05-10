@@ -107,6 +107,18 @@ def submit_entry(fid):
     db.session.commit()
     return jsonify(id=entry.id), 201
 
+@forms_bp.route("/entries/<int:eid>", methods=["PUT"])
+@jwt_required()
+def update_entry(eid):
+    entry = FormEntry.query.get_or_404(eid)
+    if entry.user_id != get_jwt_identity():
+        return jsonify(msg="Forbidden"), 403
+    data = request.get_json()
+    entry.data = data["data"]
+    entry.status = data.get("status", entry.status)
+    db.session.commit()
+    return jsonify(msg="Updated"), 200
+
 @forms_bp.route("/<int:fid>/entries/mine", methods=["GET"])
 @jwt_required()
 def list_my_entries(fid):
