@@ -157,3 +157,40 @@ def list_forms():
         "total": pagination.total,
         "total_pages": pagination.pages
     }), 200
+
+@forms_bp.route("/<int:fid>", methods=["DELETE"])
+@role_required(["Super Administrator", "Administrator"])
+def delete_form(fid):
+    """
+    DELETE /api/forms/123
+    Only allowed if no entries have been submitted for this form.
+    """
+    count = FormEntry.query.filter_by(form_id=fid).count()
+    if count > 0:
+        return jsonify(msg="Cannot delete: entries exist"), 400
+
+    form = FormDefinition.query.get_or_404(fid)
+    db.session.delete(form)
+    db.session.commit()
+    return jsonify(msg="Form deleted"), 200
+
+
+@forms_bp.route("/entries/<int:eid>", methods=["DELETE"])
+@jwt_required()
+def delete_entry(eid):
+    """
+    DELETE /api/forms/entries/456
+    Users can delete their own drafts/submissions;
+    Admins can delete any entry.
+    """
+    entry = FormEntry.query.get_or_404(eid)
+    uid   = get_jwt_identity()
+    roles = get_jwt().get("roles", [])
+
+    # only owner or admin
+    if entry.user_id != uid and not any(r in ["Super Administrator", "Administrator"] for r in roles):
+        return jsonify(msg="Forbidden"), 403
+
+    db.session.delete(entry)
+    db.session.commit()
+    return jsonify(msg="Entry deleted"), 200
