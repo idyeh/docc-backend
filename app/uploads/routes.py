@@ -11,7 +11,7 @@ uploads_bp = Blueprint("uploads", __name__)
 # allowed extensions
 ALLOWED = {"pdf", "docx", "txt", "jpg", "jpeg", "png", "mp3", "wav", "mp4"}
 
-@uploads_bp.route("/", methods=["POST"])
+@uploads_bp.route("", methods=["POST"])
 @jwt_required()
 def upload_file():
     file = request.files.get("file")

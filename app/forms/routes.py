@@ -2,9 +2,14 @@ import functools
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from app import db
-from app.models import FormDefinition, FormField, FormEntry
+from app.models import FormDefinition, FormField, FormEntry, WorkflowDefinition, WorkflowInstance
 
 forms_bp = Blueprint("forms", __name__)
+
+def user_is_admin():
+    claims = get_jwt()
+    roles = claims.get("roles", [])
+    return "Super Administrator" in roles or "Administrator" in roles
 
 def role_required(allowed_roles):
     """
@@ -54,6 +59,28 @@ def create_form():
 @jwt_required()
 def get_form(fid):
     f = FormDefinition.query.get_or_404(fid)
+    uid  = get_jwt_identity()
+
+    if not user_is_admin():
+        has_entry = FormEntry.query.filter_by(
+                        form_id=fid, user_id=uid
+                    ).first() is not None
+
+        assigned = False
+        for inst in WorkflowInstance.query.filter_by(user_id=uid):
+            wdef = WorkflowDefinition.query.get(inst.workflow_id)
+            for step in wdef.steps:
+                if step.get("form_id")==fid \
+                   and (uid in step.get("assign_users",[]) \
+                        or any(r in get_jwt().get("roles",[]) for r in step.get("assign_roles",[]))):
+                    assigned = True
+                    break
+            if assigned:
+                break
+
+        if not (has_entry or assigned):
+            return jsonify(msg="Forbidden"), 403
+    
     return jsonify({
       "id": f.id,
       "name": f.name,
@@ -141,20 +168,66 @@ def list_all_entries(fid):
 @forms_bp.route("", methods=["GET"])
 @jwt_required()
 def list_forms():
-    page = request.args.get('page', 1, type=int)
-    per_page = request.args.get('per_page', 10, type=int)
-    pagination = FormDefinition.query \
-        .order_by(FormDefinition.created_at.desc()) \
-        .paginate(page=page, per_page=per_page, error_out=False)
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 10, type=int)
+
+    if user_is_admin():
+        q = FormDefinition.query
+    else:
+        uid = get_jwt_identity()
+        roles = get_jwt().get("roles", [])
+
+        # 1) Forms the user has already submitted
+        entry_rows = (
+            db.session.query(FormEntry.form_id)
+                      .filter_by(user_id=uid)
+                      .distinct()
+                      .all()
+        )
+        entry_ids = [fid for (fid,) in entry_rows]
+
+        # 2) Forms assigned in any existing workflow definition
+        assigned_ids = []
+        for wdef in WorkflowDefinition.query.all():
+            for step in wdef.steps:
+                # only consider this step if the user or one of their roles is listed
+                if (
+                    uid in step.get("assign_users", [])
+                    or any(r in roles for r in step.get("assign_roles", []))
+                ):
+                    fid = step.get("form_id")
+                    if isinstance(fid, int):
+                        assigned_ids.append(fid)
+
+        allowed_ids = set(entry_ids) | set(assigned_ids)
+
+        # If they have no allowed IDs, return an empty page
+        if not allowed_ids:
+            return jsonify({
+                "forms":       [],
+                "page":        page,
+                "per_page":    per_page,
+                "total":       0,
+                "total_pages": 0
+            }), 200
+
+        q = FormDefinition.query.filter(
+            FormDefinition.id.in_(allowed_ids)
+        )
+
+    pagination = (
+        q.order_by(FormDefinition.created_at.desc())
+         .paginate(page=page, per_page=per_page, error_out=False)
+    )
 
     return jsonify({
         "forms": [
             {"id": f.id, "name": f.name, "description": f.description}
             for f in pagination.items
         ],
-        "page": pagination.page,
-        "per_page": pagination.per_page,
-        "total": pagination.total,
+        "page":        pagination.page,
+        "per_page":    pagination.per_page,
+        "total":       pagination.total,
         "total_pages": pagination.pages
     }), 200
 
