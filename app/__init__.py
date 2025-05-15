@@ -47,12 +47,14 @@ def create_app():
 
     # register blueprints
     from app.auth.routes      import auth_bp
+    from app.roles.routes     import roles_bp
     from app.users.routes     import users_bp
     from app.forms.routes     import forms_bp
     from app.uploads.routes   import uploads_bp
     from app.workflows.routes import workflows_bp
 
     app.register_blueprint(auth_bp,      url_prefix="/api/auth")
+    app.register_blueprint(roles_bp,     url_prefix="/api/roles")
     app.register_blueprint(users_bp,     url_prefix="/api/users")
     app.register_blueprint(forms_bp,     url_prefix="/api/forms")
     app.register_blueprint(uploads_bp,   url_prefix="/api/uploads")

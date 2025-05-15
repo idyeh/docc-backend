@@ -99,24 +99,36 @@ def create_user():
 @jwt_required()
 def update_user(uid):
     current = get_jwt_identity()
-    claims = get_jwt()
-    is_admin = any(r in ['Administrator','Super Administrator'] for r in claims.get('roles', []))
-    if uid != current and not is_admin:
-        return jsonify(msg='Forbidden'), 403
+    claims  = get_jwt()
+    user    = User.query.get_or_404(uid)
+    # Only the user themselves or an admin can update
+    is_self  = (current == uid)
+    is_admin = any(r.name in ['Administrator','Super Administrator'] for r in user.roles) \
+               or any(r in claims.get('roles', []) for r in ['Administrator','Super Administrator'])
+    if not (is_self or is_admin):
+        return jsonify(msg="Forbidden"), 403
+
     data = request.get_json()
-    user = User.query.get_or_404(uid)
     if 'username' in data:
         user.username = data['username']
     if 'password' in data:
         user.set_password(data['password'])
+
+    # Update roles (only admins)
     if is_admin and 'roles' in data:
-        user.roles = []
-        for role_name in data['roles']:
-            role = Role.query.filter_by(name=role_name).first()
-            if role:
-                user.roles.append(role)
+        # Expecting data['roles'] to be a list of role names
+        if not isinstance(data['roles'], list) or not all(isinstance(r, str) for r in data['roles']):
+            return jsonify(msg="Invalid roles format"), 400
+        roles = Role.query.filter(Role.name.in_(data['roles'])).all()
+        existing_names = {r.name for r in roles}
+        missing = set(data['roles']) - existing_names
+        if missing:
+            return jsonify(msg=f"Unknown roles: {', '.join(missing)}"), 400
+
+        user.roles = roles
+
     db.session.commit()
-    return jsonify(msg='User updated'), 200
+    return jsonify(msg="User updated"), 200
 
 # DELETE /api/users/<uid>
 @users_bp.route('/<int:uid>', methods=['DELETE'])
