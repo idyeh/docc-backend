@@ -1,8 +1,8 @@
-"""add even more models
+"""init
 
-Revision ID: ea17a1663c3f
-Revises: 6fef3719dfcf
-Create Date: 2025-05-11 01:24:40.231867
+Revision ID: 748c29f49575
+Revises: 
+Create Date: 2025-05-15 01:07:06.563602
 
 """
 from alembic import op
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = 'ea17a1663c3f'
-down_revision = '6fef3719dfcf'
+revision = '748c29f49575'
+down_revision = None
 branch_labels = None
 depends_on = None
 
@@ -27,11 +27,25 @@ def upgrade():
     sa.Column('attendees', sa.JSON(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('role',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=30), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
+    op.create_table('user',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('username', sa.String(length=80), nullable=False),
+    sa.Column('password_hash', sa.String(length=128), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('username')
+    )
     op.create_table('workflow_definition',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=256), nullable=False),
-    sa.Column('steps', sa.JSON(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('steps', sa.JSON(), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
     )
     op.create_table('achievement',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -50,6 +64,16 @@ def upgrade():
     sa.ForeignKeyConstraint(['recipient_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('form_definition',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=128), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.Column('created_by', sa.Integer(), nullable=False),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
     op.create_table('media_file',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('filename', sa.String(length=256), nullable=False),
@@ -62,6 +86,23 @@ def upgrade():
     sa.Column('version', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['uploaded_by'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('notification',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('message', sa.String(length=512), nullable=False),
+    sa.Column('url', sa.String(length=256), nullable=True),
+    sa.Column('is_read', sa.Boolean(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('roles_users',
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('role_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['role_id'], ['role.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('user_id', 'role_id')
     )
     op.create_table('staff_profile',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -101,13 +142,17 @@ def upgrade():
     )
     op.create_table('workflow_instance',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('workflow_id', sa.Integer(), nullable=True),
-    sa.Column('entity_type', sa.String(length=64), nullable=True),
-    sa.Column('entity_id', sa.Integer(), nullable=True),
+    sa.Column('workflow_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('entity_type', sa.String(length=64), nullable=False),
+    sa.Column('entity_id', sa.Integer(), nullable=False),
+    sa.Column('current_step', sa.Integer(), nullable=True),
     sa.Column('state', sa.String(length=64), nullable=True),
     sa.Column('logs', sa.JSON(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
     sa.ForeignKeyConstraint(['workflow_id'], ['workflow_definition.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('workflow_id', 'entity_type', 'entity_id', 'user_id', name='uq_workflow_instance_unique_per_user')
     )
     op.create_table('event_media',
     sa.Column('event_id', sa.Integer(), nullable=False),
@@ -115,6 +160,30 @@ def upgrade():
     sa.ForeignKeyConstraint(['event_id'], ['event_log.id'], ),
     sa.ForeignKeyConstraint(['media_id'], ['media_file.id'], ),
     sa.PrimaryKeyConstraint('event_id', 'media_id')
+    )
+    op.create_table('form_entry',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('form_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('data', sa.JSON(), nullable=False),
+    sa.Column('status', sa.String(length=16), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['form_id'], ['form_definition.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['user.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('form_field',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('form_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=64), nullable=False),
+    sa.Column('label', sa.String(length=128), nullable=False),
+    sa.Column('field_type', sa.String(length=32), nullable=False),
+    sa.Column('required', sa.Boolean(), nullable=True),
+    sa.Column('options', sa.JSON(), nullable=True),
+    sa.Column('order', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['form_id'], ['form_definition.id'], ),
+    sa.PrimaryKeyConstraint('id')
     )
     op.create_table('patent',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -143,38 +212,29 @@ def upgrade():
     sa.ForeignKeyConstraint(['owner_id'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('roles_users', schema=None) as batch_op:
-        batch_op.alter_column('user_id',
-               existing_type=sa.INTEGER(),
-               nullable=False)
-        batch_op.alter_column('role_id',
-               existing_type=sa.INTEGER(),
-               nullable=False)
-
     # ### end Alembic commands ###
 
 
 def downgrade():
     # ### commands auto generated by Alembic - please adjust! ###
-    with op.batch_alter_table('roles_users', schema=None) as batch_op:
-        batch_op.alter_column('role_id',
-               existing_type=sa.INTEGER(),
-               nullable=True)
-        batch_op.alter_column('user_id',
-               existing_type=sa.INTEGER(),
-               nullable=True)
-
     op.drop_table('research_paper')
     op.drop_table('patent')
+    op.drop_table('form_field')
+    op.drop_table('form_entry')
     op.drop_table('event_media')
     op.drop_table('workflow_instance')
     op.drop_table('user_profile')
     op.drop_table('time_schedule')
     op.drop_table('student_profile')
     op.drop_table('staff_profile')
+    op.drop_table('roles_users')
+    op.drop_table('notification')
     op.drop_table('media_file')
+    op.drop_table('form_definition')
     op.drop_table('award')
     op.drop_table('achievement')
     op.drop_table('workflow_definition')
+    op.drop_table('user')
+    op.drop_table('role')
     op.drop_table('event_log')
     # ### end Alembic commands ###

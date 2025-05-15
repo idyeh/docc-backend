@@ -46,14 +46,16 @@ def create_app():
         app.logger.error(f"MinIO setup failed: {e}")
 
     # register blueprints
-    from app.auth.routes    import auth_bp
-    from app.users.routes   import users_bp
-    from app.forms.routes   import forms_bp
-    from app.uploads.routes import uploads_bp
+    from app.auth.routes      import auth_bp
+    from app.users.routes     import users_bp
+    from app.forms.routes     import forms_bp
+    from app.uploads.routes   import uploads_bp
+    from app.workflows.routes import workflows_bp
 
-    app.register_blueprint(auth_bp,    url_prefix="/api/auth")
-    app.register_blueprint(users_bp,   url_prefix="/api/users")
-    app.register_blueprint(forms_bp,   url_prefix="/api/forms")
-    app.register_blueprint(uploads_bp, url_prefix="/api/uploads")
+    app.register_blueprint(auth_bp,      url_prefix="/api/auth")
+    app.register_blueprint(users_bp,     url_prefix="/api/users")
+    app.register_blueprint(forms_bp,     url_prefix="/api/forms")
+    app.register_blueprint(uploads_bp,   url_prefix="/api/uploads")
+    app.register_blueprint(workflows_bp, url_prefix="/api/workflows")
 
     return app

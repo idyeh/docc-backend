@@ -140,17 +140,34 @@ class EventLog(db.Model):
 class WorkflowDefinition(db.Model):
     __tablename__ = 'workflow_definition'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(256), nullable=False)
-    steps = db.Column(db.JSON)  # e.g. ["submit", "approve", ...]
+    name = db.Column(db.String(256), nullable=False, unique=True)
+    steps = db.Column(db.JSON, nullable=False) # list of objects: [{ name, assign_roles:[...], assign_users:[...] }, ...]
 
 class WorkflowInstance(db.Model):
     __tablename__ = 'workflow_instance'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'workflow_id','entity_type','entity_id','user_id',
+            name='uq_workflow_instance_unique_per_user'
+        ),
+    )
     id = db.Column(db.Integer, primary_key=True)
-    workflow_id = db.Column(db.Integer, db.ForeignKey('workflow_definition.id'))
-    entity_type = db.Column(db.String(64))  # e.g. "form_entry"
-    entity_id = db.Column(db.Integer)       # e.g. FormEntry.id
-    state = db.Column(db.String(64))        # current step name
-    logs = db.Column(db.JSON)               # history of transitions
+    workflow_id = db.Column(db.Integer, db.ForeignKey('workflow_definition.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    entity_type = db.Column(db.String(64), nullable=False) # e.g. 'form_entry'
+    entity_id = db.Column(db.Integer, nullable=False)      # e.g. FormEntry.id
+    current_step = db.Column(db.Integer, default=0)        # index into Definition.steps
+    state = db.Column(db.String(64))           # Definition.steps[current_step]['name']
+    logs = db.Column(db.JSON, default=[])      # history: [{by, step, timestamp, comment}, ...]
+
+class Notification(db.Model):
+    __tablename__ = 'notification'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.String(512), nullable=False)
+    url = db.Column(db.String(256))                        # link to view the task
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class FormDefinition(db.Model):
     __tablename__ = 'form_definition'
